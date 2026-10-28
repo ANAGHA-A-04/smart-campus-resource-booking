@@ -1,0 +1,33 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^6.0.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "axios": "^1.20.0",
+    "date-fns": "^4.4.0",
+    "lucide-react": "^1.61.0",
+    "moment": "^2.31.0",
+    "react": "^19.3.1",
+    "react-big-calendar": "^1.20.0",
+    "react-datepicker": "^9.1.0",
+    "react-day-picker": "^10.0.2",
+    "react-dom": "^19.3.1",
+    "react-hook-form": "^7.91.0",
+    "react-router-dom": "^7.18.4",
+    "zod": "^4.6.7"
+  }
+}
