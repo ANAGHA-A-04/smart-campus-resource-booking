@@ -103,6 +103,9 @@ export async function initiateRegistration({ name, studentId, email, password })
 
   // 5. Generate OTP and store hashed along with staged registration metadata
   const otp = generateNumericOtp(6);
+  if (process.env.DEV_LOG_OTP === 'true') {
+  console.log(`[DEV OTP] ${normalizedEmail}: ${otp}`);
+}
   const tokenHash = VerificationChallenge.hashToken(otp);
   const expiresAt = new Date(Date.now() + config.otp.expiryMinutes * 60 * 1000);
 
@@ -126,7 +129,11 @@ export async function initiateRegistration({ name, studentId, email, password })
     { upsert: true, new: true }
   );
 
+ if (process.env.DEV_LOG_OTP === 'true') {
+  console.log(`[DEV OTP] ${normalizedEmail}: ${otp}`);
+} else {
   await sendOtpEmail(normalizedEmail, otp, name);
+}
 
   return {
     message: `Verification OTP sent to ${normalizedEmail}. Please verify to complete your account creation.`,
@@ -224,6 +231,9 @@ export async function resendOtp({ email }) {
   }
 
   const otp = generateNumericOtp(6);
+  if (process.env.DEV_LOG_OTP === 'true') {
+  console.log(`[DEV OTP] ${normalizedEmail}: ${otp}`);
+}
   const tokenHash = VerificationChallenge.hashToken(otp);
   const expiresAt = new Date(Date.now() + config.otp.expiryMinutes * 60 * 1000);
 
@@ -233,7 +243,11 @@ export async function resendOtp({ email }) {
     { upsert: true, new: true }
   );
 
+if (process.env.DEV_LOG_OTP === 'true') {
+  console.log(`[DEV OTP] ${normalizedEmail}: ${otp}`);
+} else {
   await sendOtpEmail(normalizedEmail, otp, existingChallenge.metadata.name || 'Student');
+}
   return { message: 'A new OTP has been sent to your email.' };
 }
 
