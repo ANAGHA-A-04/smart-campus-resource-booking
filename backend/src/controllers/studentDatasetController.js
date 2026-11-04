@@ -40,15 +40,37 @@ export async function getStudents(req, res, next) {
       EligibleStudent.distinct('academicYear', { departmentId: adminDeptId }),
     ]);
 
-    // Check which students have registered accounts
-    const studentIds = students.map((s) => s.studentId);
-    const registeredUsers = await User.find({ studentId: { $in: studentIds } }).select('studentId email emailVerified accountStatus');
-    const registeredMap = new Map(registeredUsers.map((u) => [u.studentId, u]));
+    // Check which students have active registered accounts
+    const studentIds = students.map((s) => s.studentId).filter(Boolean);
+    const emails = students.map((s) => s.institutionalEmail?.toLowerCase()).filter(Boolean);
 
-    const enrichedStudents = students.map((s) => ({
-      ...s.toObject(),
-      registeredUser: registeredMap.get(s.studentId) || null,
-    }));
+    const registeredUsers = await User.find({
+      role: 'STUDENT',
+      $or: [
+        { studentId: { $in: studentIds } },
+        { email: { $in: emails } },
+      ],
+      emailVerified: true,
+      accountStatus: { $ne: 'INACTIVE' },
+    }).select('studentId email emailVerified accountStatus');
+
+    const registeredById = new Map(
+      registeredUsers.filter((u) => u.studentId).map((u) => [u.studentId.toUpperCase(), u])
+    );
+    const registeredByEmail = new Map(
+      registeredUsers.filter((u) => u.email).map((u) => [u.email.toLowerCase(), u])
+    );
+
+    const enrichedStudents = students.map((s) => {
+      const reg =
+        (s.studentId && registeredById.get(s.studentId.toUpperCase())) ||
+        (s.institutionalEmail && registeredByEmail.get(s.institutionalEmail.toLowerCase())) ||
+        null;
+      return {
+        ...s.toObject(),
+        registeredUser: reg,
+      };
+    });
 
     res.json({
       success: true,
@@ -92,6 +114,46 @@ export async function addStudent(req, res, next) {
 
     const cleanStudentId = studentId.toUpperCase().trim();
     const cleanEmail = institutionalEmail.toLowerCase().trim();
+
+    // ── Duplicate roll number check ───────────────────────────────────────────
+    // 1. Check if this roll number already exists in ANY department's roster
+    const existingRosterEntry = await EligibleStudent.findOne({ studentId: cleanStudentId })
+      .populate('departmentId', 'name code');
+
+    if (existingRosterEntry) {
+      const existingDeptId = (existingRosterEntry.departmentId?._id || existingRosterEntry.departmentId)?.toString();
+      const isSameDept = existingDeptId === adminDeptId.toString();
+
+      if (!isSameDept) {
+        // Roll number belongs to a student in a DIFFERENT department
+        const deptLabel = existingRosterEntry.departmentId?.name
+          ? `${existingRosterEntry.departmentId.name} (${existingRosterEntry.departmentId.code})`
+          : 'another department';
+        return res.status(409).json({
+          success: false,
+          message: `Roll number ${cleanStudentId} already exists in the ${deptLabel} roster under "${existingRosterEntry.institutionalEmail}". Roll numbers must be globally unique.`,
+        });
+      }
+
+      // Same dept but different email → would silently overwrite another student's record
+      if (isSameDept && existingRosterEntry.institutionalEmail !== cleanEmail) {
+        return res.status(409).json({
+          success: false,
+          message: `Roll number ${cleanStudentId} is already in this department's roster under a different email (${existingRosterEntry.institutionalEmail}). Edit the existing entry instead of creating a duplicate.`,
+        });
+      }
+      // Same dept + same email → allowed (admin is re-adding/updating same student, falls through to upsert)
+    }
+
+    // 2. Check if this roll number already has a verified platform account with a different email
+    const existingUser = await User.findOne({ studentId: cleanStudentId, emailVerified: true });
+    if (existingUser && existingUser.email !== cleanEmail) {
+      return res.status(409).json({
+        success: false,
+        message: `Roll number ${cleanStudentId} already has a registered CampusSync account under a different email (${existingUser.email}). Using this roll number will prevent this student from registering.`,
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const student = await EligibleStudent.findOneAndUpdate(
       { studentId: cleanStudentId, departmentId: adminDeptId },
@@ -183,6 +245,50 @@ export async function uploadStudentsCsv(req, res, next) {
       }
 
       const cleanStudentId = studentId.toUpperCase();
+
+      // ── Duplicate roll number check (CSV) ──────────────────────────────────
+      const existingInAnyDept = await EligibleStudent.findOne({ studentId: cleanStudentId })
+        .populate('departmentId', 'name code');
+
+      if (existingInAnyDept) {
+        const existingDeptId = (existingInAnyDept.departmentId?._id || existingInAnyDept.departmentId)?.toString();
+        const isSameDept = existingDeptId === adminDeptId.toString();
+
+        if (!isSameDept) {
+          const deptLabel = existingInAnyDept.departmentId?.name
+            ? `${existingInAnyDept.departmentId.name} (${existingInAnyDept.departmentId.code})`
+            : 'another department';
+          errors.push({
+            row: rowNumber,
+            studentId: cleanStudentId,
+            error: `Roll number already exists in ${deptLabel} roster under "${existingInAnyDept.institutionalEmail}"`,
+          });
+          continue;
+        }
+
+        // Same dept, different email
+        if (isSameDept && existingInAnyDept.institutionalEmail !== cleanEmail) {
+          errors.push({
+            row: rowNumber,
+            studentId: cleanStudentId,
+            error: `Roll number already in this department's roster under a different email (${existingInAnyDept.institutionalEmail})`,
+          });
+          continue;
+        }
+        // Same dept + same email → will be handled as an update below (fall through)
+      }
+
+      // Check if roll number is already a verified User account under a different email
+      const registeredUser = await User.findOne({ studentId: cleanStudentId, emailVerified: true });
+      if (registeredUser && registeredUser.email !== cleanEmail) {
+        errors.push({
+          row: rowNumber,
+          studentId: cleanStudentId,
+          error: `Roll number has a registered account under a different email (${registeredUser.email})`,
+        });
+        continue;
+      }
+      // ───────────────────────────────────────────────────────────────────────
 
       const existing = await EligibleStudent.findOne({
         studentId: cleanStudentId,

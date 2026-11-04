@@ -21,6 +21,8 @@ router.patch('/students/:id/status', authenticate, authorize('DEPARTMENT_ADMIN')
 router.delete('/students/:id', authenticate, authorize('DEPARTMENT_ADMIN'), studentDatasetController.deleteStudent);
 
 // ─── Timetable management ───────────────────────────────────────────────────
+router.get('/timetable/template', authenticate, authorize('DEPARTMENT_ADMIN', 'SPORTS_ADMIN'), timetableController.getTimetableCsvTemplate);
+router.post('/timetable/upload-csv', authenticate, authorize('DEPARTMENT_ADMIN', 'SPORTS_ADMIN'), upload.single('file'), timetableController.uploadTimetableCsv);
 router.patch('/timetable/:id', authenticate, authorize('DEPARTMENT_ADMIN', 'SPORTS_ADMIN'), timetableController.updateTimetableEntry);
 router.delete('/timetable/:id', authenticate, authorize('DEPARTMENT_ADMIN', 'SPORTS_ADMIN'), timetableController.deleteTimetableEntry);
 

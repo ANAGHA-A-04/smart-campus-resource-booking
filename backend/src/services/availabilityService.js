@@ -37,12 +37,18 @@ async function getTimetableBlocksForDate(resourceId, date) {
     resourceId,
     isActive: true,
     effectiveFrom: { $lte: endOfDay },
-    $or: [{ effectiveUntil: null }, { effectiveUntil: { $gte: startOfDay } }],
-    $or: [
-      // Weekly recurrence matching this day
-      { recurrence: 'WEEKLY', daysOfWeek: dayOfWeek },
-      // One-off entry on this specific date
-      { recurrence: 'NONE', specificDate: { $gte: startOfDay, $lte: endOfDay } },
+    $and: [
+      {
+        $or: [{ effectiveUntil: null }, { effectiveUntil: { $gte: startOfDay } }],
+      },
+      {
+        $or: [
+          // Weekly recurrence matching this day
+          { recurrence: 'WEEKLY', daysOfWeek: dayOfWeek },
+          // One-off entry on this specific date
+          { recurrence: 'NONE', specificDate: { $gte: startOfDay, $lte: endOfDay } },
+        ],
+      },
     ],
   });
 
@@ -107,27 +113,34 @@ async function getBookingsForDate(resourceId, date) {
 
 /**
  * Get operating hours for a resource on a given date
+ * Default college timings: 09:30 AM to 04:30 PM (Mon-Sat, Sunday closed)
  */
 function getOperatingHoursForDate(resource, date) {
-  if (!resource.operatingHours || resource.operatingHours.length === 0) {
-    // Default: 8am-8pm
+  // If specific operating hours are configured on resource (e.g. sports facilities)
+  if (resource.operatingHours && resource.operatingHours.length > 0) {
+    const dayOfWeek = date.getDay(); // 0=Sun...6=Sat
+    const hours = resource.operatingHours.find((h) => h.dayOfWeek === dayOfWeek);
+
+    if (!hours || hours.isClosed) {
+      return { isClosed: true, reason: 'Closed on this day' };
+    }
+
     return {
-      open: timeStringToDate(date, '08:00'),
-      close: timeStringToDate(date, '20:00'),
+      open: timeStringToDate(date, hours.openTime),
+      close: timeStringToDate(date, hours.closeTime),
       isClosed: false,
     };
   }
 
+  // College hours for academic resources (Labs, Classrooms, Seminar halls): 09:30 AM to 04:30 PM
   const dayOfWeek = date.getDay(); // 0=Sun...6=Sat
-  const hours = resource.operatingHours.find((h) => h.dayOfWeek === dayOfWeek);
-
-  if (!hours || hours.isClosed) {
-    return { isClosed: true };
+  if (dayOfWeek === 0) {
+    return { isClosed: true, reason: 'College is closed on Sundays' };
   }
 
   return {
-    open: timeStringToDate(date, hours.openTime),
-    close: timeStringToDate(date, hours.closeTime),
+    open: timeStringToDate(date, '09:30'),
+    close: timeStringToDate(date, '16:30'),
     isClosed: false,
   };
 }
@@ -173,13 +186,92 @@ function computeFreeSlots(operatingHours, busyIntervals, slotDurationMinutes = 3
 }
 
 /**
+ * Generate discrete, color-coded slots for UI presentation
+ */
+function generateSlots(operatingHours, busyIntervals, slotDurationMinutes = 30) {
+  if (operatingHours.isClosed) return [];
+
+  const slots = [];
+  const { open, close } = operatingHours;
+  let cursor = new Date(open);
+
+  while (cursor < close) {
+    const slotStart = new Date(cursor);
+    const slotEnd = new Date(Math.min(cursor.getTime() + slotDurationMinutes * 60000, close.getTime()));
+    if ((slotEnd - slotStart) / 60000 < 15) break;
+
+    const startH = String(slotStart.getHours()).padStart(2, '0');
+    const startM = String(slotStart.getMinutes()).padStart(2, '0');
+    const endH = String(slotEnd.getHours()).padStart(2, '0');
+    const endM = String(slotEnd.getMinutes()).padStart(2, '0');
+
+    const startTimeStr = `${startH}:${startM}`;
+    const endTimeStr = `${endH}:${endM}`;
+
+    let status = 'AVAILABLE';
+    let label = 'Available (Click to select)';
+
+    // 1. Timetable collision
+    const timetableMatch = busyIntervals.find(
+      (b) => b.type === 'TIMETABLE' && intervalsOverlap(slotStart, slotEnd, b.start, b.end)
+    );
+    if (timetableMatch) {
+      status = 'TIMETABLE';
+      label = `Class: ${timetableMatch.title}`;
+    }
+
+    // 2. Resource Admin Block collision
+    const blockMatch = busyIntervals.find(
+      (b) => b.type === 'BLOCK' && intervalsOverlap(slotStart, slotEnd, b.start, b.end)
+    );
+    if (blockMatch) {
+      status = 'UNAVAILABLE';
+      label = blockMatch.description ? `Blocked: ${blockMatch.description}` : 'Blocked by Admin';
+    }
+
+    // 3. Existing booking collision
+    const bookingMatch = busyIntervals.find(
+      (b) => b.type === 'BOOKING' && intervalsOverlap(slotStart, slotEnd, b.start, b.end)
+    );
+    if (bookingMatch) {
+      status = 'BOOKED';
+      label = 'Already Booked';
+    }
+
+    slots.push({
+      startTime: startTimeStr,
+      endTime: endTimeStr,
+      status,
+      label,
+    });
+
+    cursor = new Date(slotEnd);
+  }
+
+  return slots;
+}
+
+/**
  * Main availability function for a resource on a given date
  */
 export async function getAvailabilityForDate(resourceId, date) {
   const resource = await Resource.findById(resourceId);
   if (!resource) throw Object.assign(new Error('Resource not found'), { statusCode: 404 });
   if (resource.status !== 'ACTIVE' || !resource.bookingEnabled) {
-    return { available: false, reason: 'Resource is not available for booking', freeSlots: [], busyIntervals: [] };
+    return { available: false, isClosed: true, reason: 'Resource is not available for booking', freeSlots: [], busyIntervals: [], slots: [] };
+  }
+
+  const operatingHours = getOperatingHoursForDate(resource, date);
+  if (operatingHours.isClosed) {
+    return {
+      available: false,
+      isClosed: true,
+      reason: operatingHours.reason || 'Closed on this day',
+      operatingHours: null,
+      freeSlots: [],
+      busyIntervals: [],
+      slots: [],
+    };
   }
 
   const [timetableBlocks, resourceBlocks, bookings] = await Promise.all([
@@ -189,18 +281,20 @@ export async function getAvailabilityForDate(resourceId, date) {
   ]);
 
   const busyIntervals = [...timetableBlocks, ...resourceBlocks, ...bookings];
-  const operatingHours = getOperatingHoursForDate(resource, date);
   const slotDuration = resource.bookingRules?.slotDurationMinutes || 30;
   const freeSlots = computeFreeSlots(operatingHours, busyIntervals, slotDuration);
+  const slots = generateSlots(operatingHours, busyIntervals, slotDuration);
 
   return {
     available: freeSlots.length > 0,
-    operatingHours: operatingHours.isClosed ? null : {
+    isClosed: false,
+    operatingHours: {
       open: operatingHours.open,
       close: operatingHours.close,
     },
     freeSlots,
     busyIntervals,
+    slots,
   };
 }
 
@@ -214,19 +308,21 @@ export async function checkIntervalAvailability(resourceId, startTime, endTime, 
   if (resource.status !== 'ACTIVE') return { available: false, reason: 'Resource is inactive' };
   if (!resource.bookingEnabled) return { available: false, reason: 'Booking is disabled for this resource' };
 
-  const date = new Date(startTime);
+  const startDt = new Date(startTime);
+  const endDt = new Date(endTime);
+  const date = new Date(startDt);
 
   // Check operating hours
   const opHours = getOperatingHoursForDate(resource, date);
-  if (opHours.isClosed) return { available: false, reason: 'Resource is closed on this day' };
-  if (startTime < opHours.open || endTime > opHours.close) {
-    return { available: false, reason: 'Requested time is outside operating hours' };
+  if (opHours.isClosed) return { available: false, reason: opHours.reason || 'Resource is closed on this day' };
+  if (startDt < opHours.open || endDt > opHours.close) {
+    return { available: false, reason: 'Requested time is outside college operating hours (09:30 AM – 04:30 PM)' };
   }
 
   // Check timetable
   const timetableBlocks = await getTimetableBlocksForDate(resourceId, date);
   for (const block of timetableBlocks) {
-    if (intervalsOverlap(startTime, endTime, block.start, block.end)) {
+    if (intervalsOverlap(startDt, endDt, block.start, block.end)) {
       return { available: false, reason: `Conflicts with scheduled class: ${block.title}` };
     }
   }
@@ -234,7 +330,7 @@ export async function checkIntervalAvailability(resourceId, startTime, endTime, 
   // Check resource blocks
   const resourceBlocks = await getResourceBlocksForDate(resourceId, date);
   for (const block of resourceBlocks) {
-    if (intervalsOverlap(startTime, endTime, block.start, block.end)) {
+    if (intervalsOverlap(startDt, endDt, block.start, block.end)) {
       return { available: false, reason: `Resource is blocked: ${block.blockType}${block.description ? ' – ' + block.description : ''}` };
     }
   }
@@ -243,8 +339,8 @@ export async function checkIntervalAvailability(resourceId, startTime, endTime, 
   const conflictQuery = {
     resourceId,
     status: 'CONFIRMED',
-    startTime: { $lt: endTime },
-    endTime: { $gt: startTime },
+    startTime: { $lt: endDt },
+    endTime: { $gt: startDt },
   };
   if (excludeBookingId) {
     conflictQuery._id = { $ne: excludeBookingId };

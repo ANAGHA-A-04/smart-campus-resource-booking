@@ -15,6 +15,21 @@ const timetableEntrySchema = new mongoose.Schema(
       required: [true, 'Title is required'],
       trim: true,
     },
+    semester: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    batch: {
+      type: String,
+      default: 'All',
+      trim: true,
+    },
+    facultyName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     // For NONE recurrence: the specific date of the class (stored as Date)
     // For WEEKLY: ignored, use dayOfWeek instead
     specificDate: {

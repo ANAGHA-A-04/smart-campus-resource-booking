@@ -123,7 +123,7 @@ export async function getResourceAvailability(req, res, next) {
     const { id } = req.params;
     const { date, view = 'day' } = req.query;
 
-    const targetDate = date ? new Date(date) : new Date();
+    const targetDate = date ? new Date(date.includes('T') ? date : `${date}T00:00:00`) : new Date();
     targetDate.setHours(0, 0, 0, 0);
 
     let result;
