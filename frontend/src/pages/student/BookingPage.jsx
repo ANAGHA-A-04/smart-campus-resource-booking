@@ -87,7 +87,7 @@ export default function BookingPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Users className="w-3.5 h-3.5 text-gray-400" />
-                  <span>Capacity: {resource.capacity}</span>
+                  <span>Capacity: {resource.capacity || resource.bookingRules?.capacity || 60}</span>
                 </div>
               </div>
             </div>

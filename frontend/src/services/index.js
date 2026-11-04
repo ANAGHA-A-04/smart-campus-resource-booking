@@ -35,6 +35,10 @@ export const bookingService = {
 export const adminService = {
   updateTimetableEntry: (id, data) => api.patch(`/admin/timetable/${id}`, data),
   deleteTimetableEntry: (id) => api.delete(`/admin/timetable/${id}`),
+  uploadTimetableCsv: (formData) => api.post('/admin/timetable/upload-csv', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  downloadTimetableTemplate: () => api.get('/admin/timetable/template', { responseType: 'blob' }),
   updateBlock: (id, data) => api.patch(`/admin/blocks/${id}`, data),
   deleteBlock: (id) => api.delete(`/admin/blocks/${id}`),
 };

@@ -48,6 +48,7 @@ export default function StudentRosterPage() {
     academicYear: '',
   });
   const [adding, setAdding] = useState(false);
+  const [rollDuplicateWarning, setRollDuplicateWarning] = useState('');
 
   const fetchStudents = async () => {
     try {
@@ -137,6 +138,7 @@ export default function StudentRosterPage() {
 
   const handleAddSubmit = async (e) => {
     e.preventDefault();
+    if (rollDuplicateWarning) return; // block submit if duplicate detected
     try {
       setAdding(true);
       setError('');
@@ -145,12 +147,27 @@ export default function StudentRosterPage() {
         setSuccessMsg(res.data.message);
         setShowAddModal(false);
         setNewStudent({ studentId: '', name: '', institutionalEmail: '', academicYear: '' });
+        setRollDuplicateWarning('');
         fetchStudents();
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to add student');
     } finally {
       setAdding(false);
+    }
+  };
+
+  // Live duplicate roll number check against the already-loaded roster
+  const checkRollDuplicate = (rollValue) => {
+    const trimmed = rollValue.trim().toUpperCase();
+    if (!trimmed) { setRollDuplicateWarning(''); return; }
+    const match = students.find((s) => s.studentId?.toUpperCase() === trimmed);
+    if (match) {
+      setRollDuplicateWarning(
+        `Roll number ${trimmed} already exists in this roster (${match.name} – ${match.institutionalEmail})`
+      );
+    } else {
+      setRollDuplicateWarning('');
     }
   };
 
@@ -217,7 +234,7 @@ export default function StudentRosterPage() {
               Upload Batch CSV
             </button>
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => { setShowAddModal(true); setRollDuplicateWarning(''); }}
               className="btn text-xs flex items-center gap-1.5 bg-[#2d5282] text-white hover:bg-[#1e3a5f]"
             >
               <Plus className="h-4 w-4" />
@@ -377,7 +394,7 @@ export default function StudentRosterPage() {
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        {student.registeredUser ? (
+                        {student.registeredUser && student.registeredUser.emailVerified && student.registeredUser.accountStatus === 'ACTIVE' ? (
                           <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium">
                             <CheckCircle className="h-3.5 w-3.5" />
                             Registered
@@ -534,10 +551,22 @@ export default function StudentRosterPage() {
                     type="text"
                     placeholder="e.g. 2024CS015"
                     value={newStudent.studentId}
-                    onChange={(e) => setNewStudent({ ...newStudent, studentId: e.target.value.toUpperCase() })}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase();
+                      setNewStudent({ ...newStudent, studentId: val });
+                      checkRollDuplicate(val);
+                    }}
                     required
-                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
+                    className={`w-full border rounded-lg p-2.5 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] ${
+                      rollDuplicateWarning ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                    }`}
                   />
+                  {rollDuplicateWarning && (
+                    <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3 inline shrink-0" />
+                      {rollDuplicateWarning}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -585,7 +614,7 @@ export default function StudentRosterPage() {
                 <div className="flex justify-end gap-2 pt-2 border-t">
                   <button
                     type="button"
-                    onClick={() => setShowAddModal(false)}
+                    onClick={() => { setShowAddModal(false); setRollDuplicateWarning(''); }}
                     className="btn btn-outline text-xs"
                     disabled={adding}
                   >
@@ -593,8 +622,9 @@ export default function StudentRosterPage() {
                   </button>
                   <button
                     type="submit"
-                    className="btn btn-primary text-xs flex items-center gap-1.5"
-                    disabled={adding}
+                    className="btn btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={adding || !!rollDuplicateWarning}
+                    title={rollDuplicateWarning ? 'Fix the duplicate roll number before submitting' : ''}
                   >
                     {adding && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
                     {adding ? 'Saving...' : 'Add to Roster'}
