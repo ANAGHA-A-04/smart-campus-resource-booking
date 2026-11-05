@@ -132,7 +132,15 @@ export async function createBooking({ studentId, resourceId, startTime, endTime,
     }
 
     // 6. Validate booking rules
+    // Prevent booking past time slots
+if (new Date(startTime) <= new Date()) {
+  throw Object.assign(
+    new Error('Cannot book a time slot that has already started or passed.'),
+    { statusCode: 400 }
+  );
+}
     const rulesCheck = validateBookingRules(resource, startTime, endTime);
+    
     if (!rulesCheck.valid) {
       throw Object.assign(new Error(rulesCheck.reason), { statusCode: 400 });
     }
