@@ -12,7 +12,13 @@ const router = Router();
 router.post('/', authenticate, authorize('STUDENT'), validateRequest(createBookingSchema), bookingController.createBooking);
 router.get('/my', authenticate, authorize('STUDENT'), bookingController.getMyBookings);
 router.get('/:id', authenticate, bookingController.getBookingById);
-router.post('/:id/cancel', authenticate, authorize('STUDENT'), validateRequest(cancelBookingSchema), bookingController.cancelBooking);
+router.post(
+  '/:id/cancel',
+  authenticate,
+  authorize('STUDENT', 'DEPARTMENT_ADMIN', 'SPORTS_ADMIN'),
+  validateRequest(cancelBookingSchema),
+  bookingController.cancelBooking
+);
 
 // Admin booking views
 router.get('/admin/all', authenticate, authorize('DEPARTMENT_ADMIN', 'SPORTS_ADMIN'), bookingController.getAdminBookings);

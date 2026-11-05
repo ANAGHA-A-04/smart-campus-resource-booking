@@ -54,12 +54,18 @@ export async function getBookingById(req, res, next) {
 export async function cancelBooking(req, res, next) {
   try {
     const { reason } = req.validated.body || {};
+
     const booking = await bookingService.cancelBooking({
       bookingId: req.params.id,
-      studentId: req.user._id,
+      user: req.user,
       reason,
     });
-    res.json({ success: true, message: 'Booking cancelled successfully', booking });
+
+    res.json({
+      success: true,
+      message: 'Booking cancelled successfully',
+      booking,
+    });
   } catch (err) {
     next(err);
   }

@@ -23,7 +23,24 @@ export default function DeptBookingsPage() {
   }, []);
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
+  const handleCancel = async (bookingId) => {
+  const confirmed = window.confirm(
+    'Are you sure you want to cancel this student booking?'
+  );
 
+  if (!confirmed) return;
+
+  try {
+    await bookingService.cancel(bookingId, {
+      reason: 'Cancelled by administrator',
+    });
+
+    alert('Booking cancelled successfully!');
+    fetchBookings();
+  } catch (error) {
+    alert(error.response?.data?.message || 'Failed to cancel booking');
+  }
+};
   const filtered = bookings
     .filter(b => filter === 'ALL' || b.status === filter)
     .filter(b => {
@@ -74,6 +91,7 @@ export default function DeptBookingsPage() {
                 <th>Date & Time</th>
                 <th>Purpose</th>
                 <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -95,9 +113,19 @@ export default function DeptBookingsPage() {
                   <td className="max-w-[200px]">
                     <p className="text-xs text-gray-600 truncate">{b.purpose}</p>
                   </td>
-                  <td>
-                    <span className={`badge ${STATUS_COLORS[b.status]}`}>{b.status}</span>
-                  </td>
+                 <td>
+  <span className={`badge ${STATUS_COLORS[b.status]}`}>{b.status}</span>
+</td>
+<td>
+  {b.status === 'CONFIRMED' && (
+    <button
+      onClick={() => handleCancel(b._id)}
+      className="px-3 py-1 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700"
+    >
+      Cancel
+    </button>
+  )}
+</td>
                 </tr>
               ))}
             </tbody>

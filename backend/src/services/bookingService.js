@@ -205,43 +205,98 @@ if (new Date(startTime) <= new Date()) {
 /**
  * Cancel a booking
  */
-export async function cancelBooking({ bookingId, studentId, reason }) {
+/**
+ * Cancel a booking
+ */
+export async function cancelBooking({ bookingId, user, reason }) {
   const booking = await Booking.findById(bookingId);
-  if (!booking) throw Object.assign(new Error('Booking not found'), { statusCode: 404 });
 
-  // Only the booking owner can cancel
-  if (booking.studentId.toString() !== studentId.toString()) {
-    throw Object.assign(new Error('You are not authorized to cancel this booking'), { statusCode: 403 });
+  if (!booking) {
+    throw Object.assign(new Error('Booking not found'), { statusCode: 404 });
+  }
+
+  const resource = await Resource.findById(booking.resourceId);
+
+  if (!resource) {
+    throw Object.assign(new Error('Resource not found'), { statusCode: 404 });
+  }
+
+  const isStudent = user.role === 'STUDENT';
+  const isDepartmentAdmin = user.role === 'DEPARTMENT_ADMIN';
+  const isSportsAdmin = user.role === 'SPORTS_ADMIN';
+
+  if (isStudent) {
+    if (booking.studentId.toString() !== user._id.toString()) {
+      throw Object.assign(
+        new Error('You are not authorized to cancel this booking'),
+        { statusCode: 403 }
+      );
+    }
+  } else if (isDepartmentAdmin) {
+    const adminDeptId = (user.departmentId?._id || user.departmentId)?.toString();
+    const resourceDeptId = (resource.departmentId?._id || resource.departmentId)?.toString();
+
+    if (!adminDeptId || adminDeptId !== resourceDeptId) {
+      throw Object.assign(
+        new Error('You cannot cancel bookings for this department'),
+        { statusCode: 403 }
+      );
+    }
+  } else if (isSportsAdmin) {
+    if (resource.type !== 'SPORTS_FACILITY') {
+      throw Object.assign(
+        new Error('You can only cancel sports facility bookings'),
+        { statusCode: 403 }
+      );
+    }
+  } else {
+    throw Object.assign(new Error('You are not authorized to cancel bookings'), {
+      statusCode: 403,
+    });
   }
 
   if (booking.status !== 'CONFIRMED') {
-    throw Object.assign(new Error(`Cannot cancel a booking with status: ${booking.status}`), { statusCode: 400 });
-  }
-
-  const now = new Date();
-  if (booking.startTime <= now) {
-    throw Object.assign(new Error('Cannot cancel a booking that has already started'), { statusCode: 400 });
-  }
-
-  // Check cancellation window
-  const resource = await Resource.findById(booking.resourceId);
-  const cancellationHours = resource?.bookingRules?.cancellationHours || 2;
-  const cutoff = new Date(booking.startTime.getTime() - cancellationHours * 60 * 60 * 1000);
-  if (now > cutoff) {
     throw Object.assign(
-      new Error(`Cancellations must be made at least ${cancellationHours} hour(s) before the booking starts`),
+      new Error(`Cannot cancel a booking with status: ${booking.status}`),
       { statusCode: 400 }
     );
   }
 
+  const now = new Date();
+
+  if (booking.startTime <= now) {
+    throw Object.assign(
+      new Error('Cannot cancel a booking that has already started'),
+      { statusCode: 400 }
+    );
+  }
+
+  // Apply the cancellation window only to students
+  if (isStudent) {
+    const cancellationHours = resource?.bookingRules?.cancellationHours || 2;
+    const cutoff = new Date(
+      booking.startTime.getTime() - cancellationHours * 60 * 60 * 1000
+    );
+
+    if (now > cutoff) {
+      throw Object.assign(
+        new Error(
+          `Cancellations must be made at least ${cancellationHours} hour(s) before the booking starts`
+        ),
+        { statusCode: 400 }
+      );
+    }
+  }
+
   booking.status = 'CANCELLED';
   booking.cancelledAt = now;
-  booking.cancellationReason = reason || 'Cancelled by student';
+  booking.cancellationReason =
+    reason || (isStudent ? 'Cancelled by student' : 'Cancelled by administrator');
+
   await booking.save();
 
   return booking;
 }
-
 /**
  * Get a student's bookings
  */
