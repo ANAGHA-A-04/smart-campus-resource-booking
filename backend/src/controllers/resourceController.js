@@ -114,9 +114,13 @@ export async function updateResourceStatus(req, res, next) {
       }
     }
 
-    resource.status = status;
-    await resource.save();
-    res.json({ success: true, message: `Resource ${status === 'ACTIVE' ? 'activated' : 'deactivated'}`, resource });
+    const updated = await Resource.findByIdAndUpdate(
+      req.params.id,
+      { $set: { status } },
+      { new: true, runValidators: true }
+    ).populate('departmentId', 'name code');
+
+    res.json({ success: true, message: `Resource ${status === 'ACTIVE' ? 'activated' : 'deactivated'}`, resource: updated });
   } catch (err) {
     next(err);
   }
