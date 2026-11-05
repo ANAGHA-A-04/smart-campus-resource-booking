@@ -47,10 +47,10 @@ export default function StudentDashboard() {
       <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2d5282] rounded-2xl p-6 mb-6 text-white">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold mb-1">
+            <h2 className="text-2xl font-bold mb-1 text-white">
               Welcome back, {user?.name?.split(' ')[0]}! 👋
             </h2>
-            <p className="text-blue-200 text-sm">
+            <p className="text-white text-sm">
               {upcoming.length > 0
                 ? `You have ${upcoming.length} upcoming booking${upcoming.length > 1 ? 's' : ''}.`
                 : 'No upcoming bookings. Book a resource today!'}
