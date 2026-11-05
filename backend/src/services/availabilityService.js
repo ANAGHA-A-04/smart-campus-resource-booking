@@ -2,19 +2,116 @@ import TimetableEntry from '../models/TimetableEntry.js';
 import ResourceBlock from '../models/ResourceBlock.js';
 import Booking from '../models/Booking.js';
 import Resource from '../models/Resource.js';
-
+import { config } from '../config/environment.js';
 const DAY_NAMES = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 
 /**
  * Parse "HH:MM" time string and return a Date on the given date
  */
-function timeStringToDate(dateObj, timeStr) {
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  const d = new Date(dateObj);
-  d.setHours(hours, minutes, 0, 0);
-  return d;
+function getCampusDateParts(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: config.campusTimezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  return Object.fromEntries(
+    parts
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, Number(part.value)])
+  );
 }
 
+
+function getCampusDateKey(date) {
+  const { year, month, day } = getCampusDateParts(date);
+
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function getCampusTimeParts(date) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: config.campusTimezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+
+  return Object.fromEntries(
+    parts
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, Number(part.value)])
+  );
+}
+
+function getCampusDayOfWeek(date) {
+  const { year, month, day } = getCampusDateParts(date);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, '0'),
+    String(date.getUTCDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function campusDateTimeToDate(dateKey, timeStr) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const [hours, minutes] = timeStr.split(':').map(Number);
+
+  const utcGuess = Date.UTC(year, month - 1, day, hours, minutes);
+
+  const getOffset = (timestamp) => {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: config.campusTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(timestamp));
+
+    const values = Object.fromEntries(
+      parts
+        .filter((part) => part.type !== 'literal')
+        .map((part) => [part.type, Number(part.value)])
+    );
+
+    return Date.UTC(
+      values.year,
+      values.month - 1,
+      values.day,
+      values.hour,
+      values.minute,
+      values.second
+    ) - timestamp;
+  };
+
+  const firstOffset = getOffset(utcGuess);
+  const correctedTimestamp = utcGuess - firstOffset;
+  const secondOffset = getOffset(correctedTimestamp);
+
+  return new Date(utcGuess - secondOffset);
+}
+
+function timeStringToDate(dateObj, timeStr) {
+  return campusDateTimeToDate(getCampusDateKey(dateObj), timeStr);
+}
+export function getCampusDateStart(dateKey) {
+  return campusDateTimeToDate(dateKey, '00:00');
+}
+
+export function getCampusTodayStart() {
+  return getCampusDateStart(getCampusDateKey(new Date()));
+}
 /**
  * Check if two intervals [s1, e1) and [s2, e2) overlap
  * Using half-open intervals: [start, end)
@@ -27,12 +124,11 @@ export function intervalsOverlap(s1, e1, s2, e2) {
  * Get all timetable-blocked intervals for a resource on a specific date
  */
 async function getTimetableBlocksForDate(resourceId, date) {
-  const dayOfWeek = DAY_NAMES[date.getDay()];
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
-
+ const dayOfWeek = DAY_NAMES[getCampusDayOfWeek(date)];
+const dateKey = getCampusDateKey(date);
+const startOfDay = campusDateTimeToDate(dateKey, '00:00');
+const nextDayStart = campusDateTimeToDate(addDaysToDateKey(dateKey, 1), '00:00');
+const endOfDay = new Date(nextDayStart.getTime() - 1);
   const entries = await TimetableEntry.find({
     resourceId,
     isActive: true,
@@ -46,7 +142,7 @@ async function getTimetableBlocksForDate(resourceId, date) {
           // Weekly recurrence matching this day
           { recurrence: 'WEEKLY', daysOfWeek: dayOfWeek },
           // One-off entry on this specific date
-          { recurrence: 'NONE', specificDate: { $gte: startOfDay, $lte: endOfDay } },
+         { recurrence: 'NONE', specificDate: { $gte: startOfDay, $lt: nextDayStart } },
         ],
       },
     ],
@@ -65,14 +161,14 @@ async function getTimetableBlocksForDate(resourceId, date) {
  * Get all resource blocks overlapping a date
  */
 async function getResourceBlocksForDate(resourceId, date) {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  const dateKey = getCampusDateKey(date);
+const startOfDay = campusDateTimeToDate(dateKey, '00:00');
+const nextDayStart = campusDateTimeToDate(addDaysToDateKey(dateKey, 1), '00:00');
+
 
   const blocks = await ResourceBlock.find({
     resourceId,
-    startTime: { $lt: endOfDay },
+    startTime: { $lt: nextDayStart },
     endTime: { $gt: startOfDay },
   });
 
@@ -90,15 +186,14 @@ async function getResourceBlocksForDate(resourceId, date) {
  * Get all confirmed bookings overlapping a date
  */
 async function getBookingsForDate(resourceId, date) {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  const dateKey = getCampusDateKey(date);
+const startOfDay = campusDateTimeToDate(dateKey, '00:00');
+const nextDayStart = campusDateTimeToDate(addDaysToDateKey(dateKey, 1), '00:00');
 
   const bookings = await Booking.find({
     resourceId,
     status: 'CONFIRMED',
-    startTime: { $lt: endOfDay },
+    startTime: { $lt: nextDayStart },
     endTime: { $gt: startOfDay },
   }).populate('studentId', 'name studentId');
 
@@ -118,7 +213,7 @@ async function getBookingsForDate(resourceId, date) {
 function getOperatingHoursForDate(resource, date) {
   // If specific operating hours are configured on resource (e.g. sports facilities)
   if (resource.operatingHours && resource.operatingHours.length > 0) {
-    const dayOfWeek = date.getDay(); // 0=Sun...6=Sat
+    const dayOfWeek = getCampusDayOfWeek(date);// 0=Sun...6=Sat
     const hours = resource.operatingHours.find((h) => h.dayOfWeek === dayOfWeek);
 
     if (!hours || hours.isClosed) {
@@ -133,7 +228,7 @@ function getOperatingHoursForDate(resource, date) {
   }
 
   // College hours for academic resources (Labs, Classrooms, Seminar halls): 09:30 AM to 04:30 PM
-  const dayOfWeek = date.getDay(); // 0=Sun...6=Sat
+  const dayOfWeek = getCampusDayOfWeek(date); // 0=Sun...6=Sat
   if (dayOfWeek === 0) {
     return { isClosed: true, reason: 'College is closed on Sundays' };
   }
@@ -200,11 +295,13 @@ function generateSlots(operatingHours, busyIntervals, slotDurationMinutes = 30) 
     const slotEnd = new Date(Math.min(cursor.getTime() + slotDurationMinutes * 60000, close.getTime()));
     if ((slotEnd - slotStart) / 60000 < 15) break;
 
-    const startH = String(slotStart.getHours()).padStart(2, '0');
-    const startM = String(slotStart.getMinutes()).padStart(2, '0');
-    const endH = String(slotEnd.getHours()).padStart(2, '0');
-    const endM = String(slotEnd.getMinutes()).padStart(2, '0');
+    const startParts = getCampusTimeParts(slotStart);
+const endParts = getCampusTimeParts(slotEnd);
 
+const startH = String(startParts.hour).padStart(2, '0');
+const startM = String(startParts.minute).padStart(2, '0');
+const endH = String(endParts.hour).padStart(2, '0');
+const endM = String(endParts.minute).padStart(2, '0');
     const startTimeStr = `${startH}:${startM}`;
     const endTimeStr = `${endH}:${endM}`;
 
@@ -359,11 +456,15 @@ export async function checkIntervalAvailability(resourceId, startTime, endTime, 
  */
 export async function getAvailabilityForWeek(resourceId, startDate) {
   const results = [];
+  const startDateKey = getCampusDateKey(startDate);
+
   for (let i = 0; i < 7; i++) {
-    const date = new Date(startDate);
-    date.setDate(date.getDate() + i);
+    const dateKey = addDaysToDateKey(startDateKey, i);
+    const date = campusDateTimeToDate(dateKey, '00:00');
+
     const dayResult = await getAvailabilityForDate(resourceId, date);
-    results.push({ date: new Date(date), ...dayResult });
+    results.push({ date, ...dayResult });
   }
+
   return results;
 }

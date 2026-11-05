@@ -1,6 +1,10 @@
 import Resource from '../models/Resource.js';
-import { getAvailabilityForDate, getAvailabilityForWeek } from '../services/availabilityService.js';
-
+import {
+  getAvailabilityForDate,
+  getAvailabilityForWeek,
+  getCampusDateStart,
+  getCampusTodayStart,
+} from '../services/availabilityService.js';
 export async function getResources(req, res, next) {
   try {
     const { type, departmentId, accessPolicy, status, search, page = 1, limit = 20 } = req.query;
@@ -123,9 +127,9 @@ export async function getResourceAvailability(req, res, next) {
     const { id } = req.params;
     const { date, view = 'day' } = req.query;
 
-    const targetDate = date ? new Date(date.includes('T') ? date : `${date}T00:00:00`) : new Date();
-    targetDate.setHours(0, 0, 0, 0);
-
+    const targetDate = date
+  ? (date.includes('T') ? new Date(date) : getCampusDateStart(date))
+  : getCampusTodayStart();
     let result;
     if (view === 'week') {
       result = await getAvailabilityForWeek(id, targetDate);
