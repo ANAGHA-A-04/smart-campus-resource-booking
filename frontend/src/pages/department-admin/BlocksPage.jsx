@@ -53,7 +53,7 @@ export default function BlocksPage() {
       await resourceService.createBlock(selectedResource, {
         startTime: new Date(form.startTime).toISOString(),
         endTime: new Date(form.endTime).toISOString(),
-        reason: form.reason,
+        description: form.reason,
         blockType: form.blockType,
       });
       showToast('Block added successfully', 'success');
