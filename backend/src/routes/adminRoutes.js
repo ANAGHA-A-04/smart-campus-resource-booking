@@ -3,6 +3,7 @@ import multer from 'multer';
 import * as timetableController from '../controllers/timetableController.js';
 import * as blockController from '../controllers/blockController.js';
 import * as studentDatasetController from '../controllers/studentDatasetController.js';
+import * as adminManagementController from '../controllers/adminManagementController.js';
 import { authenticate, authorize } from '../middleware/authenticate.js';
 
 const upload = multer({
@@ -12,7 +13,7 @@ const upload = multer({
 
 const router = Router();
 
-// ─── Student Eligibility Dataset (Department Admin only) ──────────────────────
+// ─── Student Eligibility Dataset (Department Admin only) ────────────────────
 router.get('/students/template', authenticate, authorize('DEPARTMENT_ADMIN'), studentDatasetController.getCsvTemplate);
 router.get('/students', authenticate, authorize('DEPARTMENT_ADMIN'), studentDatasetController.getStudents);
 router.post('/students', authenticate, authorize('DEPARTMENT_ADMIN'), studentDatasetController.addStudent);
@@ -29,5 +30,10 @@ router.delete('/timetable/:id', authenticate, authorize('DEPARTMENT_ADMIN', 'SPO
 // ─── Block management ───────────────────────────────────────────────────────
 router.patch('/blocks/:id', authenticate, authorize('DEPARTMENT_ADMIN', 'SPORTS_ADMIN'), blockController.updateBlock);
 router.delete('/blocks/:id', authenticate, authorize('DEPARTMENT_ADMIN', 'SPORTS_ADMIN'), blockController.deleteBlock);
+
+// ─── Co-Admin Management (Department Admin & Sports Admin) ─────────────────
+router.get('/co-admins', authenticate, authorize('DEPARTMENT_ADMIN', 'SPORTS_ADMIN'), adminManagementController.getAdmins);
+router.post('/co-admins', authenticate, authorize('DEPARTMENT_ADMIN', 'SPORTS_ADMIN'), adminManagementController.createAdmin);
+router.delete('/co-admins/:id', authenticate, authorize('DEPARTMENT_ADMIN', 'SPORTS_ADMIN'), adminManagementController.deleteAdmin);
 
 export default router;

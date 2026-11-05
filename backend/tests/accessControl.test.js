@@ -1,3 +1,11 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __testDir = path.dirname(fileURLToPath(import.meta.url));
+if (!process.env.MONGOMS_DOWNLOAD_DIR) {
+  process.env.MONGOMS_DOWNLOAD_DIR = path.resolve(__testDir, '../node_modules/.cache/mongodb-memory-server');
+}
+process.env.DEV_LOG_OTP = 'true';
+import * as adminManagementController from '../src/controllers/adminManagementController.js';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import User from '../src/models/User.js';
@@ -145,7 +153,7 @@ async function setup() {
     accessPolicy: 'DEPARTMENT_ONLY',
     bookingEnabled: true,
     status: 'ACTIVE',
-    bookingRules: { minDurationMinutes: 30, maxDurationMinutes: 180, advanceBookingDays: 30 },
+    capacity: 50, bookingRules: { minDurationMinutes: 30, maxDurationMinutes: 180, advanceBookingDays: 30 },
     createdBy: eceAdmin._id,
   });
 
@@ -156,7 +164,7 @@ async function setup() {
     accessPolicy: 'ALL_DEPARTMENTS',
     bookingEnabled: true,
     status: 'ACTIVE',
-    bookingRules: { minDurationMinutes: 30, maxDurationMinutes: 180, advanceBookingDays: 30 },
+    capacity: 50, bookingRules: { minDurationMinutes: 30, maxDurationMinutes: 180, advanceBookingDays: 30 },
     createdBy: eceAdmin._id,
   });
 
@@ -168,7 +176,7 @@ async function setup() {
     allowedDepartmentIds: [eceDept._id, cseDept._id], // ECE and CSE only
     bookingEnabled: true,
     status: 'ACTIVE',
-    bookingRules: { minDurationMinutes: 30, maxDurationMinutes: 180, advanceBookingDays: 30 },
+    capacity: 50, bookingRules: { minDurationMinutes: 30, maxDurationMinutes: 180, advanceBookingDays: 30 },
     createdBy: eceAdmin._id,
   });
 
@@ -179,7 +187,7 @@ async function setup() {
     accessPolicy: 'DEPARTMENT_ONLY',
     bookingEnabled: true,
     status: 'ACTIVE',
-    bookingRules: { minDurationMinutes: 30, maxDurationMinutes: 180, advanceBookingDays: 30 },
+    capacity: 50, bookingRules: { minDurationMinutes: 30, maxDurationMinutes: 180, advanceBookingDays: 30 },
     createdBy: cseAdmin._id,
   });
 
@@ -500,7 +508,102 @@ async function runTests() {
     }
   });
 
+
+  // Test 11: A Department Admin can add an administrator for another department
+  await test('Test 11: A Department Admin can add an administrator for another department', async () => {
+    const req = {
+      user: cseAdmin,
+      body: {
+        name: 'ECE Co-Admin',
+        email: 'coadmin_ece@ug.cusat.ac.in',
+        password: 'Pass@12345678',
+        role: 'DEPARTMENT_ADMIN',
+        departmentId: eceDept._id.toString(),
+      },
+    };
+    const res = mockResponse();
+    await adminManagementController.createAdmin(req, res, () => {});
+
+    if (res.statusCode !== 201 || !res.body?.admin) {
+      throw new Error(`Failed to create co-admin: ${res.statusCode} - ${JSON.stringify(res.body)}`);
+    }
+
+    const createdAdmin = await User.findOne({ email: 'coadmin_ece@ug.cusat.ac.in' });
+    if (!createdAdmin || createdAdmin.departmentId.toString() !== eceDept._id.toString()) {
+      throw new Error('Administrator was not assigned to the selected department');
+    }
+    if (createdAdmin.role !== 'DEPARTMENT_ADMIN') {
+      throw new Error('Administrator role mismatch');
+    }
+  });
+
+  // Test 12: A Department Admin can see administrators across all departments
+  await test('Test 12: A Department Admin can see administrators across all departments', async () => {
+    const req = { user: cseAdmin };
+    const res = mockResponse();
+    await adminManagementController.getAdmins(req, res, () => {});
+
+    if (res.statusCode !== 200 || !res.body?.admins) {
+      throw new Error(`Failed to list administrators: ${res.statusCode} - ${JSON.stringify(res.body)}`);
+    }
+
+    const listedAdminIds = res.body.admins.map((admin) => admin._id.toString());
+    if (!listedAdminIds.includes(cseAdmin._id.toString()) || !listedAdminIds.includes(eceAdmin._id.toString())) {
+      throw new Error('Administrator list did not include admins from multiple departments');
+    }
+  });
+
+  // Test 13: A Department Admin cannot delete their own account (prevent self-lockout)
+  await test('Test 13: A Department Admin cannot delete their own account', async () => {
+    const req = {
+      user: cseAdmin,
+      params: { id: cseAdmin._id.toString() },
+    };
+    const res = mockResponse();
+    await adminManagementController.deleteAdmin(req, res, () => {});
+
+    if (res.statusCode !== 400) {
+      throw new Error(`Expected status 400 for self-deletion, got ${res.statusCode}`);
+    }
+  });
+
+  // Test 14: A Department Admin can delete an administrator from another department
+  await test('Test 14: A Department Admin can delete an administrator from another department', async () => {
+    const req = {
+      user: cseAdmin,
+      params: { id: eceAdmin._id.toString() },
+    };
+    const res = mockResponse();
+    await adminManagementController.deleteAdmin(req, res, () => {});
+
+    if (res.statusCode !== 200) {
+      throw new Error(`Failed to delete cross-department administrator: ${res.statusCode} - ${JSON.stringify(res.body)}`);
+    }
+    if (await User.findById(eceAdmin._id)) throw new Error('Cross-department administrator was not removed');
+  });
+
+  // Test 15: An admin can delete a co-admin in another department
+  await test('Test 15: An admin can delete a co-admin in another department', async () => {
+    const coAdmin = await User.findOne({ email: 'coadmin_ece@ug.cusat.ac.in' });
+    if (!coAdmin) throw new Error('Co-admin to delete not found');
+
+    const req = {
+      user: cseAdmin,
+      params: { id: coAdmin._id.toString() },
+    };
+    const res = mockResponse();
+    await adminManagementController.deleteAdmin(req, res, () => {});
+
+    if (res.statusCode !== 200) {
+      throw new Error(`Failed to delete co-admin: ${res.statusCode} - ${JSON.stringify(res.body)}`);
+    }
+
+    const deleted = await User.findById(coAdmin._id);
+    if (deleted) throw new Error('Co-admin was not removed from database');
+  });
+
   console.log('\n================================================================');
+
   console.log(`  TEST RESULTS: ${passed} PASSED, ${failed} FAILED                 `);
   console.log('================================================================\n');
 

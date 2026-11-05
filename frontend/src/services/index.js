@@ -53,3 +53,9 @@ export const studentRosterService = {
   deleteStudent: (id) => api.delete(`/admin/students/${id}`),
   downloadTemplate: () => api.get('/admin/students/template', { responseType: 'blob' }),
 };
+
+export const adminManagementService = {
+  getAdmins: () => api.get('/admin/co-admins'),
+  createAdmin: (data) => api.post('/admin/co-admins', data),
+  deleteAdmin: (id) => api.delete(`/admin/co-admins/${id}`),
+};

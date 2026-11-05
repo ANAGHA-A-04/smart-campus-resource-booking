@@ -21,6 +21,7 @@ const DEPT_ADMIN_NAV = [
   { label: 'Timetable', path: '/admin/timetable', icon: Calendar },
   { label: 'Availability Blocks', path: '/admin/blocks', icon: Clock },
   { label: 'Bookings', path: '/admin/bookings', icon: ClipboardList },
+  { label: 'Administrators', path: '/admin/admins', icon: Shield },
   { label: 'Profile', path: '/admin/profile', icon: User },
 ];
 
@@ -29,6 +30,7 @@ const SPORTS_ADMIN_NAV = [
   { label: 'Facilities', path: '/sports/facilities', icon: Dumbbell },
   { label: 'Blocks', path: '/sports/blocks', icon: Clock },
   { label: 'Bookings', path: '/sports/bookings', icon: ClipboardList },
+  { label: 'Administrators', path: '/sports/admins', icon: Shield },
   { label: 'Profile', path: '/sports/profile', icon: User },
 ];
 
@@ -147,7 +149,7 @@ export default function AppLayout({ children, title, breadcrumbs }) {
               <div>
                 {breadcrumbs && (
                   <p className="text-xs text-gray-400 mb-0.5">
-                    {breadcrumbs.join(' › ')}
+                    {breadcrumbs.join(' • ')}
                   </p>
                 )}
                 {title && <h2 className="font-semibold text-[#1e3a5f] text-base leading-tight">{title}</h2>}

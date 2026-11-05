@@ -5,7 +5,7 @@ import { resourceService, adminService } from '../../services/index.js';
 import { Clock, Plus, Trash2, ChevronDown } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
-const BLOCK_TYPES = ['EXAM', 'MAINTENANCE', 'EVENT', 'HOLIDAY', 'OTHER'];
+const BLOCK_TYPES = ['EXAMINATION', 'MEETING', 'EVENT', 'MAINTENANCE', 'OTHER'];
 const BLOCK_COLORS = {
   EXAM: 'badge-danger', MAINTENANCE: 'badge-warning', EVENT: 'badge-purple',
   HOLIDAY: 'badge-info', OTHER: 'badge-gray',
@@ -21,7 +21,7 @@ export default function BlocksPage() {
   const { showToast, ToastComponent } = useToast();
 
   const [form, setForm] = useState({
-    startTime: '', endTime: '', reason: '', blockType: 'EXAM',
+    startTime: '', endTime: '', reason: '', blockType: 'EXAMINATION',
   });
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function BlocksPage() {
       });
       showToast('Block added successfully', 'success');
       setShowForm(false);
-      setForm({ startTime: '', endTime: '', reason: '', blockType: 'EXAM' });
+      setForm({ startTime: '', endTime: '', reason: '', blockType: 'EXAMINATION' });
       fetchBlocks();
     } catch (err) {
       showToast(err.response?.data?.message || 'Failed to add block', 'error');

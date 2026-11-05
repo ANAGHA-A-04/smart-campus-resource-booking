@@ -46,7 +46,7 @@ export default function MyBookingsPage() {
     if (!cancelTarget) return;
     setCancelling(true);
     try {
-      await bookingService.cancel(cancelTarget._id, { cancellationReason: cancelReason || 'Cancelled by student' });
+      await bookingService.cancel(cancelTarget._id, { reason: cancelReason || 'Cancelled by student' });
       showToast('Booking cancelled successfully', 'success');
       setShowCancelModal(false);
       fetchBookings();

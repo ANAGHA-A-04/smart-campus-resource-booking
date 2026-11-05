@@ -28,6 +28,7 @@ import BlocksPage from './pages/department-admin/BlocksPage.jsx';
 import DeptBookingsPage from './pages/department-admin/DeptBookingsPage.jsx';
 import DeptProfilePage from './pages/department-admin/DeptProfilePage.jsx';
 import StudentRosterPage from './pages/department-admin/StudentRosterPage.jsx';
+import ManageAdminsPage from './pages/department-admin/ManageAdminsPage.jsx';
 
 // Sports Admin Pages
 import SportsDashboard from './pages/sports-admin/SportsDashboard.jsx';
@@ -83,6 +84,7 @@ export default function App() {
           <Route path="/admin/timetable" element={<ProtectedRoute allowedRoles={['DEPARTMENT_ADMIN']}><TimetablePage /></ProtectedRoute>} />
           <Route path="/admin/blocks" element={<ProtectedRoute allowedRoles={['DEPARTMENT_ADMIN']}><BlocksPage /></ProtectedRoute>} />
           <Route path="/admin/bookings" element={<ProtectedRoute allowedRoles={['DEPARTMENT_ADMIN']}><DeptBookingsPage /></ProtectedRoute>} />
+          <Route path="/admin/admins" element={<ProtectedRoute allowedRoles={['DEPARTMENT_ADMIN']}><ManageAdminsPage /></ProtectedRoute>} />
           <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['DEPARTMENT_ADMIN']}><DeptProfilePage /></ProtectedRoute>} />
 
           {/* Sports Admin routes */}
@@ -92,6 +94,7 @@ export default function App() {
           <Route path="/sports/facilities/:id/edit" element={<ProtectedRoute allowedRoles={['SPORTS_ADMIN']}><AddEditFacilityPage /></ProtectedRoute>} />
           <Route path="/sports/blocks" element={<ProtectedRoute allowedRoles={['SPORTS_ADMIN']}><SportsBlocksPage /></ProtectedRoute>} />
           <Route path="/sports/bookings" element={<ProtectedRoute allowedRoles={['SPORTS_ADMIN']}><SportsBookingsPage /></ProtectedRoute>} />
+          <Route path="/sports/admins" element={<ProtectedRoute allowedRoles={['SPORTS_ADMIN']}><ManageAdminsPage /></ProtectedRoute>} />
           <Route path="/sports/profile" element={<ProtectedRoute allowedRoles={['SPORTS_ADMIN']}><SportsProfilePage /></ProtectedRoute>} />
 
           {/* Misc */}
