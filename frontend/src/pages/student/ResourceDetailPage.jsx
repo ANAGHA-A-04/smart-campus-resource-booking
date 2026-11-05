@@ -326,7 +326,7 @@ export default function ResourceDetailPage() {
   availability={availability}
   onNextWorkingDay={jumpToNextWorkingDay}
   minDurationMinutes={resource?.bookingRules?.minDurationMinutes || 30}
-  maxDurationMinutes={resource?.bookingRules?.maxDurationMinutes || 240}
+  maxDurationMinutes={resource?.bookingRules?.maxDurationMinutes || 180}
 />
             )}
           </div>

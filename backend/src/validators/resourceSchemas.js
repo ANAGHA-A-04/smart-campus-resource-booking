@@ -5,6 +5,8 @@ export const createResourceSchema = z.object({
     name: z.string().min(2).max(100).trim(),
     type: z.enum(['CLASSROOM', 'LABORATORY', 'EQUIPMENT', 'SPORTS_FACILITY', 'SEMINAR_HALL']),
     location: z.string().max(200).trim().optional().default(''),
+    capacity: z.number().int().min(1),
+features: z.array(z.string()).optional().default([]),
     description: z.string().max(1000).trim().optional().default(''),
     accessPolicy: z.enum(['DEPARTMENT_ONLY', 'ALL_DEPARTMENTS', 'RESTRICTED']),
     allowedDepartmentIds: z.array(z.string()).optional().default([]),

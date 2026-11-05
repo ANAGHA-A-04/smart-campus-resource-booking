@@ -18,7 +18,7 @@ const operatingHoursSchema = new mongoose.Schema(
 const bookingRulesSchema = new mongoose.Schema(
   {
     minDurationMinutes: { type: Number, default: 30 },
-    maxDurationMinutes: { type: Number, default: 240 },
+    maxDurationMinutes: { type: Number, default: 180 },
     advanceBookingDays: { type: Number, default: 30 },   // how far in advance
     cancellationHours: { type: Number, default: 2 },      // min hours before start to cancel
     slotDurationMinutes: { type: Number, default: null }, // for sports facilities
@@ -48,6 +48,15 @@ const resourceSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    capacity: {
+  type: Number,
+  required: true,
+  min: 1,
+},
+features: {
+  type: [String],
+  default: [],
+},
     description: {
       type: String,
       trim: true,
