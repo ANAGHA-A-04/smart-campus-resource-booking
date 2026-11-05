@@ -16,10 +16,14 @@ api.interceptors.response.use(
       error.message ||
       'An unexpected error occurred';
 
-    // Redirect to login on 401 (but not on login page itself)
-    if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
-      window.location.href = '/login';
-    }
+   const publicAuthPages = ['/login', '/register', '/verify-otp', '/forgot-password', '/reset-password'];
+
+if (
+  error.response?.status === 401 &&
+  !publicAuthPages.includes(window.location.pathname)
+) {
+  window.location.href = '/login';
+}
 
     return Promise.reject({ ...error, message });
   }
