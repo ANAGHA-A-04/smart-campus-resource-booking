@@ -227,6 +227,15 @@ function getOperatingHoursForDate(resource, date) {
     };
   }
 
+  // Sports facilities default: 06:00 AM to 08:00 PM (20:00), open all 7 days
+  if (resource.type === 'SPORTS_FACILITY') {
+    return {
+      open: timeStringToDate(date, '06:00'),
+      close: timeStringToDate(date, '20:00'),
+      isClosed: false,
+    };
+  }
+
   // College hours for academic resources (Labs, Classrooms, Seminar halls): 09:30 AM to 04:30 PM
   const dayOfWeek = getCampusDayOfWeek(date); // 0=Sun...6=Sat
   if (dayOfWeek === 0) {
@@ -243,12 +252,27 @@ function getOperatingHoursForDate(resource, date) {
 /**
  * Generate free time slots from operating hours minus all busy intervals
  */
-function computeFreeSlots(operatingHours, busyIntervals, slotDurationMinutes = 30) {
+function computeFreeSlots(operatingHours, busyIntervals, slotDurationMinutes = 30, resource = null) {
   if (operatingHours.isClosed) return [];
 
   const { open, close } = operatingHours;
+  const isSports = resource?.type === 'SPORTS_FACILITY';
+  const capacity = resource?.capacity || 4;
+
+  // For sports facilities, bookings only make an interval busy if full capacity is reached
+  let effectiveBusy = busyIntervals;
+  if (isSports) {
+    const hardBlocks = busyIntervals.filter((b) => b.type !== 'BOOKING');
+    const bookingBlocks = busyIntervals.filter((b) => b.type === 'BOOKING');
+    const fullBlocks = bookingBlocks.filter((b) => {
+      const overlapCount = bookingBlocks.filter((other) => intervalsOverlap(b.start, b.end, other.start, other.end)).length;
+      return overlapCount >= capacity;
+    });
+    effectiveBusy = [...hardBlocks, ...fullBlocks];
+  }
+
   // Sort busy intervals
-  const sorted = [...busyIntervals].sort((a, b) => a.start - b.start);
+  const sorted = [...effectiveBusy].sort((a, b) => a.start - b.start);
 
   const freeSlots = [];
   let cursor = new Date(open);
@@ -283,11 +307,13 @@ function computeFreeSlots(operatingHours, busyIntervals, slotDurationMinutes = 3
 /**
  * Generate discrete, color-coded slots for UI presentation
  */
-function generateSlots(operatingHours, busyIntervals, slotDurationMinutes = 30) {
+function generateSlots(operatingHours, busyIntervals, slotDurationMinutes = 30, resource = null) {
   if (operatingHours.isClosed) return [];
 
   const slots = [];
   const { open, close } = operatingHours;
+  const isSports = resource?.type === 'SPORTS_FACILITY';
+  const capacity = resource?.capacity || (isSports ? 4 : 1);
   let cursor = new Date(open);
 
   while (cursor < close) {
@@ -296,12 +322,12 @@ function generateSlots(operatingHours, busyIntervals, slotDurationMinutes = 30) 
     if ((slotEnd - slotStart) / 60000 < 15) break;
 
     const startParts = getCampusTimeParts(slotStart);
-const endParts = getCampusTimeParts(slotEnd);
+    const endParts = getCampusTimeParts(slotEnd);
 
-const startH = String(startParts.hour).padStart(2, '0');
-const startM = String(startParts.minute).padStart(2, '0');
-const endH = String(endParts.hour).padStart(2, '0');
-const endM = String(endParts.minute).padStart(2, '0');
+    const startH = String(startParts.hour).padStart(2, '0');
+    const startM = String(startParts.minute).padStart(2, '0');
+    const endH = String(endParts.hour).padStart(2, '0');
+    const endM = String(endParts.minute).padStart(2, '0');
     const startTimeStr = `${startH}:${startM}`;
     const endTimeStr = `${endH}:${endM}`;
 
@@ -326,13 +352,28 @@ const endM = String(endParts.minute).padStart(2, '0');
       label = blockMatch.description ? `Blocked: ${blockMatch.description}` : 'Blocked by Admin';
     }
 
-    // 3. Existing booking collision
-    const bookingMatch = busyIntervals.find(
+    // 3. Existing booking collision with capacity calculation
+    const overlappingBookings = busyIntervals.filter(
       (b) => b.type === 'BOOKING' && intervalsOverlap(slotStart, slotEnd, b.start, b.end)
     );
-    if (bookingMatch) {
-      status = 'BOOKED';
-      label = 'Already Booked';
+    const bookedCount = overlappingBookings.length;
+    const spotsLeft = Math.max(0, capacity - bookedCount);
+
+    if (status === 'AVAILABLE' && overlappingBookings.length > 0) {
+      if (isSports) {
+        if (bookedCount >= capacity) {
+          status = 'BOOKED';
+          label = `Full (${bookedCount}/${capacity} spots booked)`;
+        } else {
+          status = 'AVAILABLE';
+          label = `${spotsLeft} of ${capacity} spots left`;
+        }
+      } else {
+        status = 'BOOKED';
+        label = 'Already Booked';
+      }
+    } else if (status === 'AVAILABLE' && isSports) {
+      label = `Available (${capacity} spots open)`;
     }
 
     slots.push({
@@ -340,6 +381,9 @@ const endM = String(endParts.minute).padStart(2, '0');
       endTime: endTimeStr,
       status,
       label,
+      spotsLeft: isSports ? spotsLeft : undefined,
+      capacity: isSports ? capacity : undefined,
+      bookedCount: isSports ? bookedCount : undefined,
     });
 
     cursor = new Date(slotEnd);
@@ -378,9 +422,9 @@ export async function getAvailabilityForDate(resourceId, date) {
   ]);
 
   const busyIntervals = [...timetableBlocks, ...resourceBlocks, ...bookings];
-  const slotDuration = resource.bookingRules?.slotDurationMinutes || 30;
-  const freeSlots = computeFreeSlots(operatingHours, busyIntervals, slotDuration);
-  const slots = generateSlots(operatingHours, busyIntervals, slotDuration);
+  const slotDuration = resource.bookingRules?.slotDurationMinutes || (resource.type === 'SPORTS_FACILITY' ? 60 : 30);
+  const freeSlots = computeFreeSlots(operatingHours, busyIntervals, slotDuration, resource);
+  const slots = generateSlots(operatingHours, busyIntervals, slotDuration, resource);
 
   return {
     available: freeSlots.length > 0,
@@ -413,7 +457,10 @@ export async function checkIntervalAvailability(resourceId, startTime, endTime, 
   const opHours = getOperatingHoursForDate(resource, date);
   if (opHours.isClosed) return { available: false, reason: opHours.reason || 'Resource is closed on this day' };
   if (startDt < opHours.open || endDt > opHours.close) {
-    return { available: false, reason: 'Requested time is outside college operating hours (09:30 AM – 04:30 PM)' };
+    const hoursText = resource.type === 'SPORTS_FACILITY'
+      ? 'sports operating hours (06:00 AM – 08:00 PM)'
+      : 'college operating hours (09:30 AM – 04:30 PM)';
+    return { available: false, reason: `Requested time is outside ${hoursText}` };
   }
 
   // Check timetable
@@ -443,9 +490,20 @@ export async function checkIntervalAvailability(resourceId, startTime, endTime, 
     conflictQuery._id = { $ne: excludeBookingId };
   }
 
-  const conflictingBooking = await Booking.findOne(conflictQuery);
-  if (conflictingBooking) {
-    return { available: false, reason: 'This time slot has already been booked' };
+  if (resource.type === 'SPORTS_FACILITY') {
+    const overlappingCount = await Booking.countDocuments(conflictQuery);
+    const capacity = resource.capacity || 4;
+    if (overlappingCount >= capacity) {
+      return {
+        available: false,
+        reason: `This sports facility is full for this time slot (maximum capacity of ${capacity} students reached)`,
+      };
+    }
+  } else {
+    const conflictingBooking = await Booking.findOne(conflictQuery);
+    if (conflictingBooking) {
+      return { available: false, reason: 'This time slot has already been booked' };
+    }
   }
 
   return { available: true };

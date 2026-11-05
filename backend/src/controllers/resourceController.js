@@ -59,6 +59,16 @@ export async function createResource(req, res, next) {
       data.departmentId = null;
     }
 
+    // Default operating hours for sports facility if not explicitly provided (06:00 to 20:00 / 8 PM, all 7 days)
+    if (data.type === 'SPORTS_FACILITY' && (!data.operatingHours || data.operatingHours.length === 0)) {
+      data.operatingHours = [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+        dayOfWeek,
+        openTime: '06:00',
+        closeTime: '20:00',
+        isClosed: false,
+      }));
+    }
+
     const resource = await Resource.create({ ...data, createdBy: user._id });
     await resource.populate('departmentId', 'name code');
     res.status(201).json({ success: true, message: 'Resource created successfully', resource });

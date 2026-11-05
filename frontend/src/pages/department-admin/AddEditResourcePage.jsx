@@ -150,11 +150,16 @@ export default function AddEditResourcePage() {
                   </select>
                 </div>
                 <div>
-                  <label className="form-label">Capacity *</label>
+                  <label className="form-label">
+                    {form.type === 'SPORTS_FACILITY' ? 'Player / Slot Capacity *' : 'Capacity *'}
+                  </label>
                   <input type="number" min={1} value={form.capacity}
                     onChange={e => setForm(p => ({ ...p, capacity: e.target.value }))}
-                    placeholder="e.g. 60" className={`form-input ${errors.capacity ? 'form-input-error' : ''}`} />
+                    placeholder={form.type === 'SPORTS_FACILITY' ? "e.g. 4 for Badminton Court, 20 for Gym" : "e.g. 60"} className={`form-input ${errors.capacity ? 'form-input-error' : ''}`} />
                   {errors.capacity && <p className="form-error">{errors.capacity}</p>}
+                  {form.type === 'SPORTS_FACILITY' && (
+                    <p className="text-[11px] text-gray-500 mt-1">Maximum students who can book the same time slot.</p>
+                  )}
                 </div>
               </div>
 

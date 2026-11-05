@@ -17,16 +17,19 @@ function SlotGrid({
   onNextWorkingDay,
   minDurationMinutes,
   maxDurationMinutes,
+  resourceType,
 }) {
   if (availability?.isClosed) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
-        <div className="text-3xl mb-2">🏛️</div>
+        <div className="text-3xl mb-2">{resourceType === 'SPORTS_FACILITY' ? '⚽' : '🏛️'}</div>
         <h4 className="font-semibold text-amber-900 mb-1">
-          {availability.reason || 'College is closed on this day'}
+          {availability.reason || 'Closed on this day'}
         </h4>
         <p className="text-sm text-amber-700 mb-4">
-          Academic facilities and labs operate Monday to Saturday from <strong>09:30 AM to 04:30 PM</strong>.
+          {resourceType === 'SPORTS_FACILITY'
+            ? 'Sports facilities operate Monday to Sunday from 06:00 AM to 08:00 PM.'
+            : <>Academic facilities and labs operate Monday to Saturday from <strong>09:30 AM to 04:30 PM</strong>.</>}
         </p>
         {onNextWorkingDay && (
           <button
@@ -119,9 +122,10 @@ function SlotGrid({
             <span className="font-semibold text-sm">{slot.startTime} – {slot.endTime}</span>
             <span className="text-[10px] tracking-tight truncate max-w-full">
               {slot.status === 'TIMETABLE' ? (slot.label?.replace('Class: ', '') || 'Class Timetable') :
-               slot.status === 'BOOKED' ? 'Booked' :
+               slot.status === 'BOOKED' ? (slot.capacity ? `Full (${slot.capacity}/${slot.capacity})` : 'Booked') :
                slot.status === 'UNAVAILABLE' ? 'Blocked' :
-               isSelected ? 'Selected' : 'Open Slot'}
+               isSelected ? 'Selected' :
+               (slot.spotsLeft !== undefined ? `${slot.spotsLeft} spot${slot.spotsLeft === 1 ? '' : 's'} left` : 'Open Slot')}
             </span>
           </button>
         );
@@ -234,7 +238,11 @@ export default function ResourceDetailPage() {
             {/* Operating Hours Banner */}
             <div className="mt-4 p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-xs text-blue-900 flex items-center gap-2 font-medium">
               <Clock className="w-4 h-4 text-blue-600 flex-shrink-0" />
-              <span>College Timing: <strong>09:30 AM – 04:30 PM</strong></span>
+              <span>
+                {resource.type === 'SPORTS_FACILITY'
+                  ? 'Sports Facility Timing: 06:00 AM – 08:00 PM (Monday – Sunday)'
+                  : 'College Timing: 09:30 AM – 04:30 PM (Mon – Sat)'}
+              </span>
             </div>
 
             {resource.features?.length > 0 && (
@@ -327,6 +335,7 @@ export default function ResourceDetailPage() {
   onNextWorkingDay={jumpToNextWorkingDay}
   minDurationMinutes={resource?.bookingRules?.minDurationMinutes || 30}
   maxDurationMinutes={resource?.bookingRules?.maxDurationMinutes || 180}
+  resourceType={resource?.type}
 />
             )}
           </div>

@@ -151,21 +151,59 @@ if (new Date(startTime) <= new Date()) {
       throw Object.assign(new Error(availCheck.reason), { statusCode: 409 });
     }
 
-    // 8. Overlapping reservation check
-    const conflictQuery = Booking.findOne({
-      resourceId,
-      status: 'CONFIRMED',
-      startTime: { $lt: endTime },
-      endTime: { $gt: startTime },
-    });
-    if (sess) conflictQuery.session(sess);
-    const conflict = await conflictQuery;
+    // 8. Overlapping reservation check & capacity enforcement
+    if (resource.type === 'SPORTS_FACILITY') {
+      // Prevent the same student from booking multiple spots in the same time slot
+      const studentConflictQuery = Booking.findOne({
+        resourceId,
+        studentId,
+        status: 'CONFIRMED',
+        startTime: { $lt: endTime },
+        endTime: { $gt: startTime },
+      });
+      if (sess) studentConflictQuery.session(sess);
+      const studentConflict = await studentConflictQuery;
 
-    if (conflict) {
-      throw Object.assign(
-        new Error('This time slot was just booked by another user. Please select a different slot.'),
-        { statusCode: 409 }
-      );
+      if (studentConflict) {
+        throw Object.assign(
+          new Error('You have already registered for a spot in this time slot.'),
+          { statusCode: 409 }
+        );
+      }
+
+      // Check capacity limit for sports facility
+      const capacityQuery = Booking.countDocuments({
+        resourceId,
+        status: 'CONFIRMED',
+        startTime: { $lt: endTime },
+        endTime: { $gt: startTime },
+      });
+      if (sess) capacityQuery.session(sess);
+      const bookedCount = await capacityQuery;
+      const maxCapacity = resource.capacity || 4;
+
+      if (bookedCount >= maxCapacity) {
+        throw Object.assign(
+          new Error(`This sports slot is at maximum capacity (${maxCapacity} students registered). Please choose another slot.`),
+          { statusCode: 409 }
+        );
+      }
+    } else {
+      const conflictQuery = Booking.findOne({
+        resourceId,
+        status: 'CONFIRMED',
+        startTime: { $lt: endTime },
+        endTime: { $gt: startTime },
+      });
+      if (sess) conflictQuery.session(sess);
+      const conflict = await conflictQuery;
+
+      if (conflict) {
+        throw Object.assign(
+          new Error('This time slot was just booked by another user. Please select a different slot.'),
+          { statusCode: 409 }
+        );
+      }
     }
 
     // Create the booking
