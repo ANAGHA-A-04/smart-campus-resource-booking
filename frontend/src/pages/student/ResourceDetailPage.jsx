@@ -9,7 +9,15 @@ import { ChevronLeft, ChevronRight, MapPin, Users, Clock, Calendar, ArrowLeft, A
 const TYPE_ICONS = { CLASSROOM: '🏫', LABORATORY: '🔬', EQUIPMENT: '🖥️', SPORTS_FACILITY: '⚽', SEMINAR_HALL: '🎤' };
 const TYPE_LABELS = { CLASSROOM: 'Classroom', LABORATORY: 'Laboratory', EQUIPMENT: 'Equipment', SPORTS_FACILITY: 'Sports Facility', SEMINAR_HALL: 'Seminar Hall' };
 
-function SlotGrid({ slots, onSelect, selectedSlot, availability, onNextWorkingDay }) {
+function SlotGrid({
+  slots,
+  onSelect,
+  selectedSlots,
+  availability,
+  onNextWorkingDay,
+  minDurationMinutes,
+  maxDurationMinutes,
+}) {
   if (availability?.isClosed) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
@@ -45,13 +53,61 @@ function SlotGrid({ slots, onSelect, selectedSlot, availability, onNextWorkingDa
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
       {slots.map((slot, i) => {
-        const isSelected = selectedSlot && selectedSlot.startTime === slot.startTime;
+        const isSelected = selectedSlots.some(
+  selected => selected.startTime === slot.startTime
+);
         const isAvailable = slot.status === 'AVAILABLE';
         return (
           <button
             key={i}
             disabled={!isAvailable}
-            onClick={() => isAvailable && onSelect(isSelected ? null : slot)}
+            onClick={() => {
+  if (!isAvailable) return;
+
+  const alreadySelected = selectedSlots.some(
+    selected => selected.startTime === slot.startTime
+  );
+
+  if (alreadySelected) {
+    onSelect([]);
+  } else if (selectedSlots.length === 0) {
+    onSelect([slot]);
+  } else {
+    const firstSlot = selectedSlots[0];
+
+    const startIndex = slots.findIndex(
+      s => s.startTime === firstSlot.startTime
+    );
+
+    const endIndex = slots.findIndex(
+      s => s.startTime === slot.startTime
+    );
+
+    const rangeStart = Math.min(startIndex, endIndex);
+    const rangeEnd = Math.max(startIndex, endIndex);
+
+    const range = slots.slice(rangeStart, rangeEnd + 1);
+
+    const allAvailable = range.every(
+      s => s.status === 'AVAILABLE'
+    );
+
+    const startTime = new Date(`2000-01-01T${range[0].startTime}:00`);
+    const endTime = new Date(`2000-01-01T${range[range.length - 1].endTime}:00`);
+
+    const durationMinutes = (endTime - startTime) / 60000;
+
+    if (
+      allAvailable &&
+      durationMinutes >= minDurationMinutes &&
+      durationMinutes <= maxDurationMinutes
+    ) {
+      onSelect(range);
+    } else {
+      onSelect([slot]);
+    }
+  }
+}}
             title={slot.label || `${slot.startTime} – ${slot.endTime}`}
             className={`rounded-xl p-2.5 text-xs text-center transition-all duration-150 flex flex-col items-center justify-center gap-0.5
               ${isSelected ? 'slot-selected ring-2 ring-purple-500 shadow-md scale-105 font-bold' :
@@ -83,8 +139,7 @@ export default function ResourceDetailPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [availability, setAvailability] = useState(null);
   const [availLoading, setAvailLoading] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState(null);
-
+  const [selectedSlots, setSelectedSlots] = useState([]);
   useEffect(() => {
     resourceService.getById(id)
       .then(r => setResource(r.data?.resource))
@@ -94,23 +149,31 @@ export default function ResourceDetailPage() {
 
   useEffect(() => {
     setAvailLoading(true);
-    setSelectedSlot(null);
+    setSelectedSlots([]);
     resourceService.getAvailability(id, { date: format(selectedDate, 'yyyy-MM-dd') })
       .then(r => setAvailability(r.data))
       .catch(() => setAvailability(null))
       .finally(() => setAvailLoading(false));
   }, [id, selectedDate]);
 
+
   const handleBook = () => {
-    if (!selectedSlot) return;
-    navigate(`/resources/${id}/book`, {
-      state: {
-        resource,
-        date: format(selectedDate, 'yyyy-MM-dd'),
-        slot: selectedSlot,
+  if (!selectedSlots.length) return;
+
+  const firstSlot = selectedSlots[0];
+  const lastSlot = selectedSlots[selectedSlots.length - 1];
+
+  navigate(`/resources/${id}/book`, {
+    state: {
+      resource,
+      date: format(selectedDate, 'yyyy-MM-dd'),
+      slot: {
+        ...firstSlot,
+        endTime: lastSlot.endTime,
       },
-    });
-  };
+    },
+  });
+};
 
   const jumpToNextWorkingDay = () => {
     let nextDate = addDays(selectedDate, 1);
@@ -257,17 +320,19 @@ export default function ResourceDetailPage() {
               </div>
             ) : (
               <SlotGrid
-                slots={availability?.slots || []}
-                selectedSlot={selectedSlot}
-                onSelect={setSelectedSlot}
-                availability={availability}
-                onNextWorkingDay={jumpToNextWorkingDay}
-              />
+  slots={availability?.slots || []}
+  selectedSlots={selectedSlots}
+  onSelect={setSelectedSlots}
+  availability={availability}
+  onNextWorkingDay={jumpToNextWorkingDay}
+  minDurationMinutes={resource?.bookingRules?.minDurationMinutes || 30}
+  maxDurationMinutes={resource?.bookingRules?.maxDurationMinutes || 240}
+/>
             )}
           </div>
 
           {/* Selected Slot Confirmation Bar */}
-          {selectedSlot && (
+          {selectedSlots.length > 0 && (
             <div className="card p-5 border-2 border-emerald-500 bg-emerald-50/30 shadow-md fade-in">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -277,7 +342,7 @@ export default function ResourceDetailPage() {
                   <div>
                     <p className="text-xs text-gray-500 font-medium">Selected Slot</p>
                     <p className="font-bold text-[#1e3a5f] text-lg">
-                      {selectedSlot.startTime} – {selectedSlot.endTime}
+                      {selectedSlots[0].startTime} – {selectedSlots[selectedSlots.length - 1].endTime}
                     </p>
                     <p className="text-xs text-gray-600">{format(selectedDate, 'EEEE, MMMM d, yyyy')}</p>
                   </div>
