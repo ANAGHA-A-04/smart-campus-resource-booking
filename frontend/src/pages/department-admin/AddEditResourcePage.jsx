@@ -45,8 +45,8 @@ export default function AddEditResourcePage() {
               description: res.description || '',
               accessPolicy: res.accessPolicy || 'DEPARTMENT_ONLY',
               features: res.features || [],
-              bookingLeadTimeDays: res.bookingLeadTimeDays || 7,
-              maxBookingDurationHours: res.maxBookingDurationHours || 3,
+              bookingLeadTimeDays: res.bookingRules?.advanceBookingDays ?? 7,
+              maxBookingDurationHours: (res.bookingRules?.maxDurationMinutes ?? 180) / 60,
               departmentId: res.departmentId?._id || res.departmentId || '',
             });
           }
@@ -81,12 +81,19 @@ export default function AddEditResourcePage() {
     setErrors({});
     try {
       const payload = {
-        ...form,
-        capacity: parseInt(form.capacity),
-        bookingLeadTimeDays: parseInt(form.bookingLeadTimeDays),
-        maxBookingDurationHours: parseInt(form.maxBookingDurationHours),
-        departmentId: form.departmentId || user?.departmentId?._id,
-      };
+  name: form.name,
+  type: form.type,
+  location: form.location,
+  capacity: parseInt(form.capacity, 10),
+  description: form.description,
+  accessPolicy: form.accessPolicy,
+  features: form.features,
+  bookingRules: {
+    advanceBookingDays: parseInt(form.bookingLeadTimeDays, 10),
+    maxDurationMinutes: parseInt(form.maxBookingDurationHours, 10) * 60,
+  },
+  departmentId: form.departmentId || user?.departmentId?._id,
+};
       if (isEdit) {
         await resourceService.update(id, payload);
         showToast('Resource updated successfully', 'success');
@@ -178,7 +185,7 @@ export default function AddEditResourcePage() {
               </div>
               <div>
                 <label className="form-label">Max Duration (hours)</label>
-                <input type="number" min={1} max={12} value={form.maxBookingDurationHours}
+                <input type="number" min={1} max={3} value={form.maxBookingDurationHours}
                   onChange={e => setForm(p => ({ ...p, maxBookingDurationHours: e.target.value }))} className="form-input" />
                 <p className="form-hint">Per single booking</p>
               </div>
