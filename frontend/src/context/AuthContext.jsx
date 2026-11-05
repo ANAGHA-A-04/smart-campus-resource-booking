@@ -24,13 +24,22 @@ export function AuthProvider({ children }) {
 
   const login = async (credentials) => {
     const res = await authService.login(credentials);
+    if (res.data?.token) {
+      localStorage.setItem('token', res.data.token);
+    }
     setUser(res.data.user);
     return res.data.user;
   };
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
+    try {
+      await authService.logout();
+    } catch {
+      // ignore
+    } finally {
+      localStorage.removeItem('token');
+      setUser(null);
+    }
   };
 
   const refreshUser = () => fetchMe();
