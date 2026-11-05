@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import AppLayout from '../../components/layout/AppLayout.jsx';
 import { LoadingState, EmptyState, ErrorState, ConfirmDialog, useToast } from '../../components/common/index.jsx';
 import { resourceService } from '../../services/index.js';
@@ -9,6 +9,9 @@ const TYPE_ICONS = { CLASSROOM: '🏫', LABORATORY: '🔬', EQUIPMENT: '🖥️'
 const TYPE_LABELS = { CLASSROOM: 'Classroom', LABORATORY: 'Laboratory', EQUIPMENT: 'Equipment', SPORTS_FACILITY: 'Sports Facility', SEMINAR_HALL: 'Seminar Hall' };
 
 export default function DeptResourcesPage() {
+  const location = useLocation();
+  const isSportsAdmin = location.pathname.startsWith('/sports/');
+  const resourcePath = isSportsAdmin ? '/sports/facilities' : '/admin/resources';
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -46,7 +49,10 @@ export default function DeptResourcesPage() {
   );
 
   return (
-    <AppLayout title="Manage Resources" breadcrumbs={['Admin', 'Resources']}>
+    <AppLayout
+      title={isSportsAdmin ? 'Manage Facilities' : 'Manage Resources'}
+      breadcrumbs={[isSportsAdmin ? 'Sports Admin' : 'Admin', isSportsAdmin ? 'Facilities' : 'Resources']}
+    >
       {ToastComponent}
 
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
@@ -55,7 +61,7 @@ export default function DeptResourcesPage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search resources..."
             className="form-input pl-9 w-full" />
         </div>
-        <Link to="/admin/resources/new" className="btn-primary btn gap-2 shrink-0">
+        <Link to={`${resourcePath}/new`} className="btn-primary btn gap-2 shrink-0">
           <Plus className="w-4 h-4" /> Add Resource
         </Link>
       </div>
@@ -65,8 +71,9 @@ export default function DeptResourcesPage() {
       ) : error ? (
         <ErrorState message={error} onRetry={fetchResources} />
       ) : filtered.length === 0 ? (
-        <EmptyState icon={Building2} title="No resources found" description="Add your first resource to get started"
-          action={<Link to="/admin/resources/new" className="btn-primary btn btn-sm gap-1"><Plus className="w-3.5 h-3.5" />Add Resource</Link>} />
+        <EmptyState icon={Building2} title={isSportsAdmin ? 'No facilities found' : 'No resources found'}
+          description="Add your first resource to get started"
+          action={<Link to={`${resourcePath}/new`} className="btn-primary btn btn-sm gap-1"><Plus className="w-3.5 h-3.5" />Add Resource</Link>} />
       ) : (
         <div className="table-container">
           <table className="table">
@@ -104,7 +111,7 @@ export default function DeptResourcesPage() {
                   </td>
                   <td>
                     <div className="flex items-center gap-2">
-                      <Link to={`/admin/resources/${r._id}/edit`}
+                      <Link to={`${resourcePath}/${r._id}/edit`}
                         className="btn btn-ghost btn-sm p-1.5" title="Edit">
                         <Pencil className="w-3.5 h-3.5" />
                       </Link>

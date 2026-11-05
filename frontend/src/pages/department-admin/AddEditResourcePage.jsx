@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import AppLayout from '../../components/layout/AppLayout.jsx';
 import { resourceService } from '../../services/index.js';
 import { useToast } from '../../components/common/index.jsx';
@@ -19,8 +19,11 @@ const DEFAULTS = {
 export default function AddEditResourcePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const isEdit = !!id;
+  const isSportsAdmin = location.pathname.startsWith('/sports/');
+  const resourcePath = isSportsAdmin ? '/sports/facilities' : '/admin/resources';
   const { showToast, ToastComponent } = useToast();
 
   const [form, setForm] = useState(DEFAULTS);
@@ -101,7 +104,7 @@ export default function AddEditResourcePage() {
         await resourceService.create(payload);
         showToast('Resource created successfully', 'success');
       }
-      setTimeout(() => navigate('/admin/resources'), 800);
+      setTimeout(() => navigate(resourcePath), 800);
     } catch (err) {
       showToast(err.response?.data?.message || 'Operation failed', 'error');
     } finally {
@@ -116,7 +119,10 @@ export default function AddEditResourcePage() {
   );
 
   return (
-    <AppLayout title={isEdit ? 'Edit Resource' : 'Add New Resource'} breadcrumbs={['Admin', 'Resources', isEdit ? 'Edit' : 'New']}>
+    <AppLayout
+      title={isEdit ? 'Edit Resource' : 'Add New Resource'}
+      breadcrumbs={[isSportsAdmin ? 'Sports Admin' : 'Admin', isSportsAdmin ? 'Facilities' : 'Resources', isEdit ? 'Edit' : 'New']}
+    >
       {ToastComponent}
 
       <button onClick={() => navigate(-1)} className="btn btn-ghost btn-sm mb-4 gap-1.5 -ml-1">
